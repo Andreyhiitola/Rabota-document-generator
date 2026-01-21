@@ -2,6 +2,7 @@ version: '3.8'
 
 # ============================================================
 # PRODUCTION CONFIG - использует образ из Docker Hub
+# С АВТОМАТИЧЕСКИМ ОБНОВЛЕНИЕМ ЧЕРЕЗ WATCHTOWER
 # ============================================================
 
 services:
@@ -36,65 +37,37 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    labels:
+      # Watchtower будет мониторить этот контейнер
+      - "com.centurylinklabs.watchtower.enable=true"
 
   # ============================================================
-  # СИНХРОНИЗАЦИЯ TRELLO (запуск по требованию)
+  # WATCHTOWER - АВТОМАТИЧЕСКОЕ ОБНОВЛЕНИЕ КОНТЕЙНЕРОВ
   # ============================================================
-  sync:
-    image: ${DOCKERHUB_USERNAME}/severen-generator:latest
-    container_name: severen-sync
-    command: python sync_trello_severen.py
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: severen-watchtower
     volumes:
-      - ./output:/app/output
-      - ./excel_files:/app/excel_files
-      - ./data:/app/data
+      # Доступ к Docker socket для управления контейнерами
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      - TRELLO_API_KEY=${TRELLO_API_KEY}
-      - TRELLO_TOKEN=${TRELLO_TOKEN}
-      - TRELLO_BOARD_ID=${TRELLO_BOARD_ID:-gfcln6rS}
-      - EXCEL_PATH=${EXCEL_PATH:-/app/excel_files/ПРИЛОЖЕНИЕ_1_3_4_ALL_IN_ONE.xlsx}
-    networks:
-      - severen-network
-    profiles:
-      - tools
-
-  # ============================================================
-  # АВТОСИНХРОНИЗАЦИЯ (опционально, по расписанию)
-  # ============================================================
-  auto-sync:
-    image: ${DOCKERHUB_USERNAME}/severen-generator:latest
-    container_name: severen-auto-sync
-    command: python -c "
-import schedule;
-import time;
-import subprocess;
-def job():
-    subprocess.run(['python', 'sync_trello_severen.py']);
-schedule.every(1).hours.do(job);
-while True:
-    schedule.run_pending();
-    time.sleep(60);
-"
-    volumes:
-      - ./output:/app/output
-      - ./excel_files:/app/excel_files
-      - ./data:/app/data
-    environment:
-      - TRELLO_API_KEY=${TRELLO_API_KEY}
-      - TRELLO_TOKEN=${TRELLO_TOKEN}
-      - TRELLO_BOARD_ID=${TRELLO_BOARD_ID:-gfcln6rS}
-      - EXCEL_PATH=${EXCEL_PATH:-/app/excel_files/ПРИЛОЖЕНИЕ_1_3_4_ALL_IN_ONE.xlsx}
+      # Проверка обновлений каждые 5 минут (300 секунд)
+      - WATCHTOWER_POLL_INTERVAL=300
+      # Автоматическая очистка старых образов
+      - WATCHTOWER_CLEANUP=true
+      # Мониторить только контейнеры с label
+      - WATCHTOWER_LABEL_ENABLE=true
+      # Таймаут для остановки контейнера (10 секунд)
+      - WATCHTOWER_TIMEOUT=10s
+      # Включить rolling restart (обновление по одному)
+      - WATCHTOWER_ROLLING_RESTART=true
     restart: unless-stopped
     networks:
       - severen-network
-    profiles:
-      - auto
+    labels:
+      # Watchtower не обновляет сам себя
+      - "com.centurylinklabs.watchtower.enable=false"
 
 networks:
   severen-network:
     driver: bridge
-
-volumes:
-  output_data:
-  excel_data:
-  email_templates:
