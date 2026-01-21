@@ -5,6 +5,7 @@
 [![Docker Hub](https://img.shields.io/badge/docker-ready-blue)](https://hub.docker.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+
 ## ✨ Возможности
 
 - 📡 **Автоматическая синхронизация** Trello → Excel
