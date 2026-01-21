@@ -13,9 +13,9 @@ on:
       - master
 
 env:
-  DOCKER_IMAGE_NAME: severen-generator
+  DOCKER_IMAGE_NAME: document-generator
   # Замените на ваш username в Docker Hub
-  DOCKERHUB_USERNAME: your-dockerhub-username
+  DOCKERHUB_USERNAME: andreysagurov
 
 jobs:
   build-and-push:
