@@ -1,0 +1,104 @@
+version: '3.8'
+
+services:
+  # ============================================================
+  # ВЕБ-ИНТЕРФЕЙС (основной сервис)
+  # ============================================================
+  web:
+    build: .
+    container_name: severen-web
+    ports:
+      - "5000:5000"  # Веб-интерфейс
+    volumes:
+      # Монтируем папки для данных
+      - ./output:/app/output
+      - ./data:/app/data
+      - ./email_templates:/app/email_templates
+      # Для Excel файлов
+      - ./excel_files:/app/excel_files
+      # Для кода (разработка)
+      - ./sync_trello_severen.py:/app/sync_trello_severen.py
+      - ./email_generator.py:/app/email_generator.py
+      - ./config.py:/app/config.py
+    environment:
+      - TRELLO_API_KEY=${TRELLO_API_KEY}
+      - TRELLO_TOKEN=${TRELLO_TOKEN}
+      - TRELLO_BOARD_ID=${TRELLO_BOARD_ID:-gfcln6rS}
+      - EXCEL_PATH=${EXCEL_PATH:-/app/excel_files/ПРИЛОЖЕНИЕ_1_3_4_ALL_IN_ONE.xlsx}
+      - FLASK_ENV=production
+      - FLASK_APP=web_app.py
+    restart: unless-stopped
+    networks:
+      - severen-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ============================================================
+  # СИНХРОНИЗАЦИЯ TRELLO (запуск по требованию)
+  # ============================================================
+  sync:
+    build: .
+    container_name: severen-sync
+    command: python sync_trello_severen.py
+    volumes:
+      - ./output:/app/output
+      - ./excel_files:/app/excel_files
+      - ./data:/app/data
+      - ./sync_trello_severen.py:/app/sync_trello_severen.py
+      - ./config.py:/app/config.py
+    environment:
+      - TRELLO_API_KEY=${TRELLO_API_KEY}
+      - TRELLO_TOKEN=${TRELLO_TOKEN}
+      - TRELLO_BOARD_ID=${TRELLO_BOARD_ID:-gfcln6rS}
+      - EXCEL_PATH=${EXCEL_PATH:-/app/excel_files/ПРИЛОЖЕНИЕ_1_3_4_ALL_IN_ONE.xlsx}
+    networks:
+      - severen-network
+    profiles:
+      - tools
+
+  # ============================================================
+  # АВТОСИНХРОНИЗАЦИЯ (опционально, по расписанию)
+  # ============================================================
+  auto-sync:
+    build: .
+    container_name: severen-auto-sync
+    command: python -c "
+import schedule;
+import time;
+import subprocess;
+def job():
+    subprocess.run(['python', 'sync_trello_severen.py']);
+schedule.every(1).hours.do(job);
+while True:
+    schedule.run_pending();
+    time.sleep(60);
+"
+    volumes:
+      - ./output:/app/output
+      - ./excel_files:/app/excel_files
+      - ./data:/app/data
+      - ./sync_trello_severen.py:/app/sync_trello_severen.py
+      - ./config.py:/app/config.py
+    environment:
+      - TRELLO_API_KEY=${TRELLO_API_KEY}
+      - TRELLO_TOKEN=${TRELLO_TOKEN}
+      - TRELLO_BOARD_ID=${TRELLO_BOARD_ID:-gfcln6rS}
+      - EXCEL_PATH=${EXCEL_PATH:-/app/excel_files/ПРИЛОЖЕНИЕ_1_3_4_ALL_IN_ONE.xlsx}
+    restart: unless-stopped
+    networks:
+      - severen-network
+    profiles:
+      - auto
+
+networks:
+  severen-network:
+    driver: bridge
+
+volumes:
+  output_data:
+  excel_data:
+  email_templates:
