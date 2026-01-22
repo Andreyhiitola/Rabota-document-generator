@@ -141,14 +141,47 @@ def full_sync():
             current_month = datetime.now().month
             current_year = datetime.now().year
             
+            # Создаём копию файла для отчёта с датой
+            report_filename = f"Отчет_СЕВЕРЕН_{current_year}-{current_month:02d}_{datetime.now().strftime('%d-%m-%Y_%H-%M')}.xlsx"
+            report_local_path = f"/app/excel_files/{report_filename}"
+            
+            # Копируем исходный файл
+            import shutil
+            shutil.copy(local_file, report_local_path)
+            logger.info(f"📋 Создана копия для отчёта: {report_filename}")
+            
+            # Генерируем отчёты в копии
             report_success = generate_monthly_reports(
-                excel_file=local_file,
+                excel_file=report_local_path,
                 month=current_month,
                 year=current_year
             )
             
             if report_success:
                 logger.info("✅ Отчёты сформированы")
+                
+                # Загружаем отчёт в Dropbox
+                logger.info("")
+                logger.info("📤 Загрузка отчёта в Dropbox...")
+                
+                from dropbox_sync import DropboxSync
+                sync_obj = DropboxSync(dropbox_token)
+                
+                if sync_obj.connect():
+                    # Загружаем в папку /Отчеты/
+                    dropbox_report_path = f"/Отчеты/{report_filename}"
+                    
+                    upload_success = sync_obj.upload_file(
+                        local_path=report_local_path,
+                        dropbox_path=dropbox_report_path
+                    )
+                    
+                    if upload_success:
+                        logger.info(f"✅ Отчёт загружен в Dropbox: {dropbox_report_path}")
+                    else:
+                        logger.warning("⚠️ Не удалось загрузить отчёт в Dropbox")
+                else:
+                    logger.warning("⚠️ Не удалось подключиться к Dropbox для загрузки отчёта")
             else:
                 logger.warning("⚠️ Не удалось сформировать отчёты")
                 
