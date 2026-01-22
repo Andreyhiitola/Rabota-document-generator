@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Генератор отчётов ПРИЛОЖЕНИЕ 1 и 3
-Версия 2.0 - Чтение из листа Северен_новая
+Версия 2.1 - Исправлена работа с объединёнными ячейками
 """
 
 import os
@@ -13,6 +13,7 @@ from calendar import monthrange
 
 try:
     import openpyxl
+    from openpyxl.cell.cell import MergedCell
     from openpyxl.styles import Font, Alignment, Border, Side
 except ImportError:
     print("❌ Модуль openpyxl не установлен")
@@ -29,21 +30,21 @@ logger = logging.getLogger(__name__)
 class ReportGeneratorV2:
     """Генератор отчётов из листа Северен_новая"""
     
-    # Индексы колонок (из sync_trello_severen.py)
-    COL_NUM = 1         # A - № (=ROW()-1)
-    COL_HIDE = 2        # B - Скрыть (x)
-    COL_ACT = 3         # C - Акты
-    COL_DISTRICT = 4    # D - Район города
-    COL_DESC = 5        # E - Описание
-    COL_ADDRESS = 6     # F - Адрес предоставления услуги
-    COL_DATE_START = 7  # G - Дата начала отчёта
-    COL_DATE_END = 8    # H - Дата окончания отчёта  
-    COL_PRICE = 9       # I - Стоимость
-    COL_SERVICE = 10    # J - Вид услуги
-    COL_STATUS = 18     # R - Статус
-    COL_CLIENT = 22     # V - Клиент
-    COL_WORK_START = 26 # Z - Начало работ
-    COL_EXECUTOR = 28   # AB - Исполнитель
+    # Индексы колонок
+    COL_NUM = 1
+    COL_HIDE = 2
+    COL_ACT = 3
+    COL_DISTRICT = 4
+    COL_DESC = 5
+    COL_ADDRESS = 6
+    COL_DATE_START = 7
+    COL_DATE_END = 8
+    COL_PRICE = 9
+    COL_SERVICE = 10
+    COL_STATUS = 18
+    COL_CLIENT = 22
+    COL_WORK_START = 26
+    COL_EXECUTOR = 28
     
     def __init__(self, excel_file: str):
         self.excel_file = excel_file
@@ -56,7 +57,6 @@ class ReportGeneratorV2:
             logger.info(f"📂 Загрузка: {self.excel_file}")
             self.wb = openpyxl.load_workbook(self.excel_file)
             
-            # Ищем лист Северен_новая (как в sync_trello_severen.py)
             for name in self.wb.sheetnames:
                 if 'Северен_новая' in name:
                     self.ws_data = self.wb[name]
@@ -74,49 +74,33 @@ class ReportGeneratorV2:
             return False
     
     def extract_data_for_month(self, month: int, year: int) -> List[Dict]:
-        """
-        Извлечение данных за месяц
-        
-        Args:
-            month: Месяц (1-12)
-            year: Год
-            
-        Returns:
-            Список словарей с данными работ
-        """
+        """Извлечение данных за месяц"""
         logger.info(f"📊 Извлечение данных за {month:02d}.{year}")
         
-        # Границы месяца
         _, last_day = monthrange(year, month)
         start_date = datetime(year, month, 1)
         end_date = datetime(year, month, last_day, 23, 59, 59)
         
         data = []
         
-        # Проходим по строкам (со 2-й, т.к. 1-я - заголовок)
         for row_idx in range(2, self.ws_data.max_row + 1):
-            # Проверяем скрыта ли строка
             hide_marker = self.ws_data.cell(row_idx, self.COL_HIDE).value
             if hide_marker and str(hide_marker).strip().lower() == 'x':
                 continue
             
-            # Адрес (обязательное поле)
             address = self.ws_data.cell(row_idx, self.COL_ADDRESS).value
             if not address or str(address).strip() == '':
                 continue
             
-            # Дата начала отчёта (колонка G)
             date_cell = self.ws_data.cell(row_idx, self.COL_DATE_START).value
             
             if not date_cell:
                 continue
                 
             try:
-                # Парсим дату
                 if isinstance(date_cell, datetime):
                     work_date = date_cell
                 else:
-                    # Пробуем разные форматы
                     date_str = str(date_cell).strip()
                     try:
                         work_date = datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S')
@@ -126,14 +110,12 @@ class ReportGeneratorV2:
                         except:
                             continue
                 
-                # Проверяем попадание в месяц
                 if not (start_date <= work_date <= end_date):
                     continue
                     
             except (ValueError, TypeError):
                 continue
             
-            # Извлекаем данные строки
             work_data = {
                 'row': row_idx,
                 'address': str(address).strip(),
@@ -157,7 +139,6 @@ class ReportGeneratorV2:
         """Обновление ПРИЛОЖЕНИЕ 1"""
         logger.info("📄 Обновление ПРИЛОЖЕНИЕ 1...")
         
-        # Ищем лист
         sheet_name = None
         for name in self.wb.sheetnames:
             if 'прил_1' in name.lower() or ('акт' in name.lower() and '1' in name):
@@ -166,73 +147,6 @@ class ReportGeneratorV2:
         
         if not sheet_name:
             logger.error("❌ Лист ПРИЛОЖЕНИЕ 1 не найден")
-            return False
-        
-        ws = self.wb[sheet_name]
-        
-        # Стили
-        header_font = Font(name='Arial', size=10, bold=True)
-        normal_font = Font(name='Arial', size=9)
-        border = Border(
-            left=Side(style='thin'),
-            right=Side(style='thin'),
-            top=Side(style='thin'),
-            bottom=Side(style='thin')
-        )
-        
-        # Ищем начало таблицы (строку с "№ п/п")
-        start_row = None
-        for row_idx in range(1, 20):
-            cell_val = ws.cell(row_idx, 1).value
-            if cell_val and '№' in str(cell_val):
-                start_row = row_idx + 1
-                break
-        
-        if not start_row:
-            logger.error("❌ Не найдена таблица в ПРИЛОЖЕНИЕ 1")
-            return False
-        
-        # Очищаем старые данные
-        for row in ws.iter_rows(min_row=start_row, max_row=ws.max_row):
-            for cell in row:
-                cell.value = None
-                cell.border = None
-        
-        # Заполняем новыми данными
-        current_row = start_row
-        
-        for idx, work in enumerate(data, start=1):
-            ws.cell(current_row, 1).value = idx
-            ws.cell(current_row, 2).value = work['address']
-            ws.cell(current_row, 3).value = work['work_start'] or work['date_start']
-            ws.cell(current_row, 4).value = work['date_end']
-            ws.cell(current_row, 5).value = work['service']
-            
-            # Стили
-            for col in range(1, 6):
-                cell = ws.cell(current_row, col)
-                cell.font = normal_font
-                cell.border = border
-                cell.alignment = Alignment(vertical='center', wrap_text=True)
-            
-            current_row += 1
-        
-        logger.info(f"✅ ПРИЛОЖЕНИЕ 1: {len(data)} записей")
-        return True
-    
-    def update_prilozhenie_3(self, data: List[Dict], month: int, year: int) -> bool:
-        """Обновление ПРИЛОЖЕНИЕ 3"""
-        logger.info("📄 Обновление ПРИЛОЖЕНИЕ 3...")
-        
-        # Ищем лист
-        sheet_name = None
-        for name in self.wb.sheetnames:
-            if 'прил_3' in name.lower() or 'ведомость' in name.lower():
-                sheet_name = name
-                break
-        
-        if not sheet_name:
-            logger.error("❌ Лист ПРИЛОЖЕНИЕ 3 не найден")
             return False
         
         ws = self.wb[sheet_name]
@@ -256,16 +170,82 @@ class ReportGeneratorV2:
                 break
         
         if not start_row:
+            logger.error("❌ Не найдена таблица в ПРИЛОЖЕНИЕ 1")
+            return False
+        
+        # Очищаем старые данные (исправлено: пропускаем MergedCell)
+        for row_idx in range(start_row, ws.max_row + 1):
+            for col_idx in range(1, 10):
+                cell = ws.cell(row_idx, col_idx)
+                if not isinstance(cell, MergedCell):
+                    cell.value = None
+                    cell.border = None
+        
+        # Заполняем новыми данными
+        current_row = start_row
+        
+        for idx, work in enumerate(data, start=1):
+            ws.cell(current_row, 1).value = idx
+            ws.cell(current_row, 2).value = work['address']
+            ws.cell(current_row, 3).value = work['work_start'] or work['date_start']
+            ws.cell(current_row, 4).value = work['date_end']
+            ws.cell(current_row, 5).value = work['service']
+            
+            for col in range(1, 6):
+                cell = ws.cell(current_row, col)
+                cell.font = normal_font
+                cell.border = border
+                cell.alignment = Alignment(vertical='center', wrap_text=True)
+            
+            current_row += 1
+        
+        logger.info(f"✅ ПРИЛОЖЕНИЕ 1: {len(data)} записей")
+        return True
+    
+    def update_prilozhenie_3(self, data: List[Dict], month: int, year: int) -> bool:
+        """Обновление ПРИЛОЖЕНИЕ 3"""
+        logger.info("📄 Обновление ПРИЛОЖЕНИЕ 3...")
+        
+        sheet_name = None
+        for name in self.wb.sheetnames:
+            if 'прил_3' in name.lower() or 'ведомость' in name.lower():
+                sheet_name = name
+                break
+        
+        if not sheet_name:
+            logger.error("❌ Лист ПРИЛОЖЕНИЕ 3 не найден")
+            return False
+        
+        ws = self.wb[sheet_name]
+        
+        header_font = Font(name='Arial', size=10, bold=True)
+        normal_font = Font(name='Arial', size=9)
+        border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        
+        start_row = None
+        for row_idx in range(1, 20):
+            cell_val = ws.cell(row_idx, 1).value
+            if cell_val and '№' in str(cell_val):
+                start_row = row_idx + 1
+                break
+        
+        if not start_row:
             logger.error("❌ Не найдена таблица в ПРИЛОЖЕНИЕ 3")
             return False
         
-        # Очищаем старые данные
-        for row in ws.iter_rows(min_row=start_row, max_row=ws.max_row):
-            for cell in row:
-                cell.value = None
-                cell.border = None
+        # Очищаем старые данные (исправлено)
+        for row_idx in range(start_row, ws.max_row + 1):
+            for col_idx in range(1, 10):
+                cell = ws.cell(row_idx, col_idx)
+                if not isinstance(cell, MergedCell):
+                    cell.value = None
+                    cell.border = None
         
-        # Заполняем новыми данными
         current_row = start_row
         total_sum = 0
         
@@ -274,7 +254,6 @@ class ReportGeneratorV2:
             ws.cell(current_row, 2).value = work['address']
             ws.cell(current_row, 3).value = work['service']
             
-            # Стоимость
             price = work['price']
             if price:
                 try:
@@ -286,7 +265,6 @@ class ReportGeneratorV2:
             else:
                 ws.cell(current_row, 4).value = 0
             
-            # Стили
             for col in range(1, 5):
                 cell = ws.cell(current_row, col)
                 cell.font = normal_font
@@ -322,17 +300,7 @@ class ReportGeneratorV2:
 
 
 def generate_monthly_reports(excel_file: str, month: int, year: int) -> bool:
-    """
-    Генерация отчётов за месяц
-    
-    Args:
-        excel_file: Путь к Excel файлу
-        month: Месяц (1-12)
-        year: Год
-        
-    Returns:
-        True если успешно
-    """
+    """Генерация отчётов за месяц"""
     logger.info("=" * 80)
     logger.info("📊 ГЕНЕРАЦИЯ ОТЧЁТОВ")
     logger.info("=" * 80)
@@ -341,21 +309,17 @@ def generate_monthly_reports(excel_file: str, month: int, year: int) -> bool:
     logger.info("")
     
     try:
-        # Создаём генератор
         generator = ReportGeneratorV2(excel_file)
         
-        # Загружаем файл
         if not generator.load_workbook():
             return False
         
-        # Извлекаем данные
         data = generator.extract_data_for_month(month, year)
         
         if not data:
             logger.warning("⚠️ Нет данных за указанный период")
             return False
         
-        # Обновляем отчёты
         success1 = generator.update_prilozhenie_1(data, month, year)
         success2 = generator.update_prilozhenie_3(data, month, year)
         
@@ -363,7 +327,6 @@ def generate_monthly_reports(excel_file: str, month: int, year: int) -> bool:
             logger.error("❌ Ошибка обновления отчётов")
             return False
         
-        # Сохраняем
         if not generator.save():
             return False
         
