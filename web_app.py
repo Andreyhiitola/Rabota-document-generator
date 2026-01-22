@@ -6,7 +6,7 @@ from report_generator import generate_monthly_report
 app = Flask(__name__)
 
 # Путь к Excel файлу из Dropbox (синхронизируется автоматически)
-EXCEL_FILE = '/app/excel_files/Rabochie_tabl_SMR_v2-1.xlsx'
+EXCEL_FILE = '/app/files/Рабочие_табл_СМР_v2.xlsx'
 
 # HTML шаблон
 HTML_TEMPLATE = """
