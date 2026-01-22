@@ -1,9 +1,12 @@
 from flask import Flask, render_template_string, request, send_file, jsonify
 from datetime import datetime
 import os
-from report_generator_v2 import ReportGenerator
+from report_generator import generate_monthly_report
 
 app = Flask(__name__)
+
+# Путь к Excel файлу из Dropbox (синхронизируется автоматически)
+EXCEL_FILE = '/app/excel_files/Rabochie_tabl_SMR_v2-1.xlsx'
 
 # HTML шаблон
 HTML_TEMPLATE = """
@@ -69,7 +72,7 @@ HTML_TEMPLATE = """
             font-size: 1em;
         }
 
-        input[type="date"] {
+        input[type="text"], select {
             width: 100%;
             padding: 15px;
             border: 2px solid #e0e0e0;
@@ -79,7 +82,7 @@ HTML_TEMPLATE = """
             font-family: inherit;
         }
 
-        input[type="date"]:focus {
+        input:focus, select:focus {
             outline: none;
             border-color: #667eea;
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
@@ -194,19 +197,42 @@ HTML_TEMPLATE = """
     <div class="container">
         <div class="header">
             <h1>📊 Генератор отчётов</h1>
-            <p>Северный - система отчётности</p>
+            <p>Северный - система отчётности СМР</p>
         </div>
 
         <div class="content">
             <form id="reportForm">
                 <div class="form-group">
-                    <label for="startDate">📅 Дата начала периода:</label>
-                    <input type="date" id="startDate" name="startDate" required>
+                    <label for="month">📅 Месяц:</label>
+                    <select id="month" name="month" required>
+                        <option value="1">Январь</option>
+                        <option value="2">Февраль</option>
+                        <option value="3">Март</option>
+                        <option value="4">Апрель</option>
+                        <option value="5">Май</option>
+                        <option value="6">Июнь</option>
+                        <option value="7">Июль</option>
+                        <option value="8">Август</option>
+                        <option value="9">Сентябрь</option>
+                        <option value="10">Октябрь</option>
+                        <option value="11">Ноябрь</option>
+                        <option value="12">Декабрь</option>
+                    </select>
                 </div>
 
                 <div class="form-group">
-                    <label for="endDate">📅 Дата окончания периода:</label>
-                    <input type="date" id="endDate" name="endDate" required>
+                    <label for="year">📅 Год:</label>
+                    <select id="year" name="year" required>
+                        <option value="2024">2024</option>
+                        <option value="2025">2025</option>
+                        <option value="2026" selected>2026</option>
+                        <option value="2027">2027</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="client">👤 Клиент (опционально):</label>
+                    <input type="text" id="client" name="client" placeholder="Оставьте пустым для всех клиентов">
                 </div>
 
                 <button type="submit" class="btn" id="generateBtn">
@@ -219,22 +245,19 @@ HTML_TEMPLATE = """
             <div class="info-box">
                 <h3>ℹ️ Информация</h3>
                 <ul>
-                    <li>Данные загружаются из Google Sheets</li>
-                    <li>Автоматический подсчёт итогов</li>
-                    <li>Выгрузка в формате Excel</li>
-                    <li>Фильтрация по выбранному периоду</li>
+                    <li>Данные из Dropbox (автосинхронизация)</li>
+                    <li>Отчёт формируется за выбранный месяц</li>
+                    <li>Включает транзитные адреса</li>
+                    <li>Формат Excel (.xlsx)</li>
                 </ul>
             </div>
         </div>
     </div>
 
     <script>
-        // Установка текущей даты
-        const today = new Date();
-        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-
-        document.getElementById('startDate').valueAsDate = firstDay;
-        document.getElementById('endDate').valueAsDate = today;
+        // Установка текущего месяца
+        const now = new Date();
+        document.getElementById('month').value = now.getMonth() + 1;
 
         // Обработка формы
         document.getElementById('reportForm').addEventListener('submit', async (e) => {
@@ -242,14 +265,9 @@ HTML_TEMPLATE = """
 
             const btn = document.getElementById('generateBtn');
             const status = document.getElementById('status');
-            const startDate = document.getElementById('startDate').value;
-            const endDate = document.getElementById('endDate').value;
-
-            // Валидация дат
-            if (new Date(startDate) > new Date(endDate)) {
-                showStatus('error', 'Дата начала не может быть позже даты окончания');
-                return;
-            }
+            const month = parseInt(document.getElementById('month').value);
+            const year = parseInt(document.getElementById('year').value);
+            const client = document.getElementById('client').value.trim();
 
             // Показать загрузку
             btn.disabled = true;
@@ -260,7 +278,7 @@ HTML_TEMPLATE = """
                 const response = await fetch('/generate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ startDate, endDate })
+                    body: JSON.stringify({ month, year, client })
                 });
 
                 if (response.ok) {
@@ -268,7 +286,11 @@ HTML_TEMPLATE = """
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = `Отчет_${startDate}_${endDate}.xlsx`;
+
+                    const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 
+                                       'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+                    a.download = `Отчет_${monthNames[month-1]}_${year}.xlsx`;
+
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);
@@ -319,19 +341,26 @@ def generate_report():
     """Генерация отчёта"""
     try:
         data = request.get_json()
-        start_date = data.get('startDate')
-        end_date = data.get('endDate')
+        month = data.get('month')
+        year = data.get('year', 2026)
+        client = data.get('client', '')
 
-        if not start_date or not end_date:
-            return jsonify({'error': 'Не указаны даты'}), 400
+        if not month:
+            return jsonify({'error': 'Не указан месяц'}), 400
 
-        # Создаём генератор отчётов
-        generator = ReportGenerator()
+        # Создаём временный файл для отчёта
+        output_file = f'/tmp/report_{month}_{year}.xlsx'
 
         # Генерируем отчёт
-        output_file = generator.generate_report(start_date, end_date)
+        success = generate_monthly_report(
+            source_file=EXCEL_FILE,
+            output_file=output_file,
+            month=month,
+            year=year,
+            client=client
+        )
 
-        if not output_file or not os.path.exists(output_file):
+        if not success or not os.path.exists(output_file):
             return jsonify({'error': 'Ошибка генерации отчёта'}), 500
 
         # Отправляем файл
@@ -339,7 +368,7 @@ def generate_report():
             output_file,
             mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             as_attachment=True,
-            download_name=f'Отчет_{start_date}_{end_date}.xlsx'
+            download_name=f'Отчет_{month}_{year}.xlsx'
         )
 
     except Exception as e:
@@ -347,12 +376,12 @@ def generate_report():
 
 if __name__ == '__main__':
     print("=" * 50)
-    print(" Генератор отчётов - Северный")
+    print(" Генератор отчётов - Северный СМР")
     print("=" * 50)
     print()
     print("🌐 Откройте в браузере: http://localhost:5000")
     print()
-    print("📊 Выберите период и создавайте отчёты!")
+    print("📊 Выберите месяц/год и создавайте отчёты!")
     print()
 
     app.run(host='0.0.0.0', port=5000, debug=True)
