@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Главный скрипт полной синхронизации
-Dropbox → Локально → Обновление из Trello → Dropbox
+Dropbox → Локально → Обновление из Trello → Dropbox → Отчёты
 """
 
 import os
@@ -63,7 +63,7 @@ def full_sync():
         # ШАГ 1: Скачивание файла из Dropbox
         logger.info("")
         logger.info("=" * 80)
-        logger.info("ШАГ 1/3: СКАЧИВАНИЕ ИЗ DROPBOX")
+        logger.info("ШАГ 1/4: СКАЧИВАНИЕ ИЗ DROPBOX")
         logger.info("=" * 80)
         
         # Создание директории для файла
@@ -86,7 +86,7 @@ def full_sync():
         # ШАГ 2: Синхронизация данных из Trello
         logger.info("")
         logger.info("=" * 80)
-        logger.info("ШАГ 2/3: СИНХРОНИЗАЦИЯ TRELLO → EXCEL")
+        logger.info("ШАГ 2/4: СИНХРОНИЗАЦИЯ TRELLO → EXCEL")
         logger.info("=" * 80)
         
         success = sync_trello_to_excel(local_file)
@@ -100,7 +100,7 @@ def full_sync():
         # ШАГ 3: Загрузка обновлённого файла в Dropbox
         logger.info("")
         logger.info("=" * 80)
-        logger.info("ШАГ 3/3: ЗАГРУЗКА В DROPBOX")
+        logger.info("ШАГ 3/4: ЗАГРУЗКА В DROPBOX")
         logger.info("=" * 80)
         
         # Если путь не был задан, используем найденный на шаге 1
@@ -128,6 +128,34 @@ def full_sync():
             return False
         
         logger.info("✅ Файл успешно загружен в Dropbox")
+        
+        # ШАГ 4: Генерация отчётов
+        logger.info("")
+        logger.info("=" * 80)
+        logger.info("ШАГ 4/4: ГЕНЕРАЦИЯ ОТЧЁТОВ")
+        logger.info("=" * 80)
+        
+        try:
+            from report_generator_v2 import generate_monthly_reports
+            
+            current_month = datetime.now().month
+            current_year = datetime.now().year
+            
+            report_success = generate_monthly_reports(
+                excel_file=local_file,
+                month=current_month,
+                year=current_year
+            )
+            
+            if report_success:
+                logger.info("✅ Отчёты сформированы")
+            else:
+                logger.warning("⚠️ Не удалось сформировать отчёты")
+                
+        except Exception as e:
+            logger.error(f"❌ Ошибка генерации отчётов: {e}")
+            import traceback
+            traceback.print_exc()
         
         # ИТОГИ
         logger.info("")
