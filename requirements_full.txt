@@ -1,12 +1,21 @@
-# Python зависимости для системы синхронизации Trello-Excel-Dropbox
-
-# Основные библиотеки
-requests==2.31.0
+# Core dependencies
 openpyxl==3.1.2
-python-dotenv==1.0.0
+pandas==2.0.3
+numpy==1.24.3
 
-# Dropbox интеграция
-dropbox==11.36.2
+# Web framework
+flask==3.0.0
+werkzeug==3.0.0
 
-# Работа с датами
+# HTTP requests
+requests==2.31.0
+
+# Date/time handling
 python-dateutil==2.8.2
+pytz==2023.3
+
+# Email
+secure-smtplib==0.1.1
+
+# Optional
+pillow==10.0.0
