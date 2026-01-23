@@ -2,6 +2,8 @@ services:
   app:
     build: .
     container_name: severen-document-generator
+    env_file:
+      - .env
     volumes:
       - ./files:/app/files
       - ./output:/app/output
@@ -18,6 +20,8 @@ services:
   report-generator:
     build: .
     container_name: severen-report-generator
+    env_file:
+      - .env
     volumes:
       - ./files:/app/files
       - ./output:/app/output
