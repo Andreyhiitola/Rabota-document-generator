@@ -22,3 +22,4 @@ secure-smtplib==0.1.1
 
 # Optional
 pillow==10.0.0
+dropbox>=11.36.0
