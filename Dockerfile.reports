@@ -1,0 +1,8 @@
+FROM python:3.11-slim
+WORKDIR /app
+COPY requirements_full.txt .
+RUN pip install --no-cache-dir -r requirements_full.txt flask openpyxl
+COPY fill_report.py .
+COPY templates/ ./templates/
+EXPOSE 8080
+CMD ["python", "fill_report.py"]

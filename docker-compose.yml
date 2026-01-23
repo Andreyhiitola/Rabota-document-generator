@@ -1,34 +1,18 @@
+version: '3.8'
 services:
-  app:
-    build: .
-    container_name: severen-document-generator
-    env_file:
-      - .env
-    volumes:
-      - ./files:/app/files
-      - ./output:/app/output
-      - ./logs:/app/logs
-      - ./Рабочие_табл_СМР_v2.xlsx:/app/files/Рабочие_табл_СМР_v2.xlsx:ro
-    environment:
-      - TZ=Europe/Moscow
-    working_dir: /app
+  trello:
+    build: 
+      context: .
+      dockerfile: Dockerfile
     ports:
       - "5000:5000"
-    command: python web_app.py
-    restart: unless-stopped
-
-  report-generator:
-    build: .
-    container_name: severen-report-generator
-    env_file:
-      - .env
+  
+  reports:
+    build:
+      context: .
+      dockerfile: Dockerfile.reports
+    ports:
+      - "8080:8080"
     volumes:
-      - ./files:/app/files
-      - ./output:/app/output
-      - ./logs:/app/logs
-      - ./Рабочие_табл_СМР_v2.xlsx:/app/files/Рабочие_табл_СМР_v2.xlsx:ro
-    environment:
-      - TZ=Europe/Moscow
-    working_dir: /app
-    command: tail -f /dev/null
-    restart: unless-stopped
+      - ./templates:/app/templates:ro
+      - /tmp:/tmp
