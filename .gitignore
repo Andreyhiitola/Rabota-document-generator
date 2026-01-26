@@ -1,4 +1,74 @@
-# Byte-compiled / optimized / DLL files
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Секреты и токены
+.env
+*.env
+.env.*
+!env.example
+
+# Excel и временные файлы
+*.xlsx
+!template.xlsx
+*.xls
+*.csv
+~$*
+
+# Логи
+logs/
+*.log
+
+# Рабочие данные
+excel_files/
+output/
+Готовый_Акт_*.xlsx
+
+# Архивы
+archive/
+archive_*/
+_archive_*/
+*.OLD
+*.BACKUP
+*.backup
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Docker
+.docker/
+
+# Временные файлы
+*.tmp
+*.temp
+.cache/
+
+# Документация (временные файлы Claude)
+LOCAL_SETUP.md
+DOCKER_SETUP.md
+CHEATSHEET.md
+FILES_SUMMARY.md
+FIX_DOCKER_COMPOSE.md
+run_*_local.sh
+setup_local.sh# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
 *$py.class
