@@ -1,26 +1,26 @@
+version: '3.8'
+
 services:
   sync:
-    image: andreysagurov/severen-generator:latest
+    image: andreysagurov/severen-generator:latest  # <- Для production из Docker Hub
     container_name: severen-sync
     env_file:
       - .env
     volumes:
       - ./excel_files:/app/excel_files
       - ./output:/app/output
-      - ./logs:/app/logs
       - ./templates:/app/templates
     command: python3 full_sync.py
     restart: "no"
     
   auto-sync:
-    image: andreysagurov/severen-generator:latest
+    image: andreysagurov/severen-generator:latest  # <- Для production из Docker Hub
     container_name: severen-auto-sync
     env_file:
       - .env
     volumes:
       - ./excel_files:/app/excel_files
       - ./output:/app/output
-      - ./logs:/app/logs
       - ./templates:/app/templates
     command: >
       sh -c "while true; do
@@ -31,3 +31,17 @@ services:
     restart: unless-stopped
     profiles:
       - auto-sync
+  
+  # Watchtower - автообновление контейнеров
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_POLL_INTERVAL=300  # Проверка каждые 5 минут
+      - WATCHTOWER_INCLUDE_RESTARTING=true
+      - WATCHTOWER_INCLUDE_STOPPED=false
+      - WATCHTOWER_REVIVE_STOPPED=false
+    restart: unless-stopped

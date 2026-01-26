@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  sync:
+    build: .  # <- Локальная сборка
+    container_name: severen-sync-local
+    env_file:
+      - .env
+    volumes:
+      - ./excel_files:/app/excel_files
+      - ./output:/app/output
+      - ./templates:/app/templates
+    command: python3 full_sync.py
+    restart: "no"

@@ -57,6 +57,7 @@ class DropboxSync:
     def find_file(self, filename: str) -> str:
         """
         Найти файл в Dropbox по имени
+        Сначала проверяет корень, потом делает рекурсивный поиск
         
         Args:
             filename: Имя файла для поиска
@@ -67,7 +68,18 @@ class DropboxSync:
         logger.info(f"Поиск файла: {filename}")
         
         try:
-            # Поиск в корне
+            # СНАЧАЛА проверяем корень напрямую
+            root_path = f"/{filename}"
+            try:
+                metadata = self.dbx.files_get_metadata(root_path)
+                if isinstance(metadata, dropbox.files.FileMetadata):
+                    logger.info(f"✅ Найден файл в корне: {metadata.path_display}")
+                    return metadata.path_display
+            except:
+                logger.debug(f"Файл не найден в корне: {root_path}")
+            
+            # Если в корне нет - ищем рекурсивно
+            logger.info("Файл не в корне, запуск рекурсивного поиска...")
             result = self.dbx.files_list_folder("")
             
             def search_recursive(path):
@@ -76,7 +88,7 @@ class DropboxSync:
                     result = self.dbx.files_list_folder(path)
                     for entry in result.entries:
                         if isinstance(entry, dropbox.files.FileMetadata):
-                            if filename.lower() in entry.name.lower():
+                            if filename.lower() == entry.name.lower():
                                 logger.info(f"✅ Найден файл: {entry.path_display}")
                                 return entry.path_display
                         elif isinstance(entry, dropbox.files.FolderMetadata):
@@ -90,7 +102,7 @@ class DropboxSync:
             # Поиск по всем файлам и папкам
             for entry in result.entries:
                 if isinstance(entry, dropbox.files.FileMetadata):
-                    if filename.lower() in entry.name.lower():
+                    if filename.lower() == entry.name.lower():
                         logger.info(f"✅ Найден файл: {entry.path_display}")
                         return entry.path_display
                 elif isinstance(entry, dropbox.files.FolderMetadata):
