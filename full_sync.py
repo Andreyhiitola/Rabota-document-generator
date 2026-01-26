@@ -60,7 +60,7 @@ print("=" * 80)
 try:
     subprocess.run([
         'python3', 'generate_act.py',
-        '--input', data_file,
+        '--data', data_file,
         '--template', 'template.xlsx',
         '--output', output_dir
     ], check=True, capture_output=False)
