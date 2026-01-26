@@ -1,17 +1,9 @@
-# Dropbox API
 dropbox
-
-# Excel работа
-openpyxl
-xlrd
-xlsxwriter
-
-# Trello API
 requests
 python-dateutil
-
-# Работа с документами
-python-docx
-
-# Утилиты
 python-dotenv
+openpyxl
+pandas
+xlrd
+xlsxwriter
+python-docx
