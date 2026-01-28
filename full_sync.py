@@ -1,114 +1,74 @@
 #!/usr/bin/env python3
-"""
-full_sync.py - Полная синхронизация Trello ↔ Excel ↔ Dropbox + Генерация документов
-"""
-
 import os
-import sys
-import subprocess
+import dropbox
+import requests
+from dotenv import load_dotenv
+from pathlib import Path
+from datetime import datetime
 
-print("=" * 80)
-print("🚀 ЗАПУСК ПОЛНОЙ СИНХРОНИЗАЦИИ")
-print("=" * 80)
-print()
+load_dotenv()
 
-# Рабочие файлы внутри контейнера
-data_file = '/tmp/data.xlsx'
-output_dir = '/tmp/output'
-os.makedirs(output_dir, exist_ok=True)
+class DropboxAuth:
+    def __init__(self):
+        self.app_key = os.getenv('DROPBOX_APP_KEY')
+        self.app_secret = os.getenv('DROPBOX_APP_SECRET')
+        self.refresh_token = os.getenv('DROPBOX_REFRESH_TOKEN')
+    
+    def get_client(self):
+        response = requests.post('https://api.dropbox.com/oauth2/token', data={
+            'grant_type': 'refresh_token',
+            'refresh_token': self.refresh_token,
+            'client_id': self.app_key,
+            'client_secret': self.app_secret,
+        }).json()
+        return dropbox.Dropbox(response['access_token'])
 
-# === ШАГ 1: СКАЧИВАНИЕ data.xlsx ИЗ DROPBOX ===
-print("=" * 80)
-print("ШАГ 1/4: СКАЧИВАНИЕ data.xlsx ИЗ DROPBOX")
-print("=" * 80)
+def create_folder_if_not_exists(dbx, folder_path):
+    """Создает папку в Dropbox если не существует"""
+    try:
+        dbx.files_list_folder(folder_path)
+    except:
+        dbx.files_create_folder_v2(folder_path)
+        print(f"📁 Создана папка: {folder_path}")
 
-try:
-    subprocess.run([
-        'curl', '-L',
-        'https://www.dropbox.com/scl/fi/fsrhazmth8e8cf4xkcbvu/data.xlsx?rlkey=ka2y3rz85bhamxibyyc1p47js&dl=1',
-        '-o', data_file
-    ], check=True)
-    print("✅ data.xlsx скачан")
-except subprocess.CalledProcessError as e:
-    print(f"❌ Ошибка скачивания: {e}")
-    sys.exit(1)
-
-print()
-
-# === ШАГ 2: СИНХРОНИЗАЦИЯ TRELLO → EXCEL ===
-print("=" * 80)
-print("ШАГ 2/4: СИНХРОНИЗАЦИЯ TRELLO → data.xlsx")
-print("=" * 80)
-
-try:
-    subprocess.run([
-        'python3', 'sync_trello_severen.py',
-        '--file', data_file
-    ], check=True, capture_output=False)
-    print("✅ Trello синхронизирован")
-except subprocess.CalledProcessError as e:
-    print(f"❌ Ошибка синхронизации: {e}")
-    sys.exit(1)
-
-print()
-
-# === ШАГ 3: ГЕНЕРАЦИЯ ДОКУМЕНТА ИЗ TEMPLATE ===
-print("=" * 80)
-print("ШАГ 3/4: ГЕНЕРАЦИЯ ДОКУМЕНТА ИЗ template.xlsx")
-print("=" * 80)
-
-try:
-    subprocess.run([
-        'python3', 'generate_act.py',
-        '--data', data_file,
-        '--template', 'template.xlsx',
-        '--output', output_dir
-    ], check=True, capture_output=False)
-    print("✅ Документ сгенерирован")
-except subprocess.CalledProcessError as e:
-    print(f"❌ Ошибка генерации: {e}")
-    # Продолжаем даже если генерация не удалась
-    pass
-
-print()
-
-# === ШАГ 4: ЗАГРУЗКА ОБРАТНО В DROPBOX ===
-print("=" * 80)
-print("ШАГ 4/4: ЗАГРУЗКА В DROPBOX")
-print("=" * 80)
-
-# Загружаем обновленный data.xlsx
-try:
-    subprocess.run([
-        'python3', 'dropbox_sync.py', '--token', os.getenv('TOKEN'),
-        '--local', data_file,
-        '--dropbox', '/data.xlsx',
-        '--upload-only'
-    ], check=True, capture_output=False)
-    print("✅ data.xlsx загружен в Dropbox")
-except subprocess.CalledProcessError as e:
-    print(f"❌ Ошибка загрузки data.xlsx: {e}")
-
-# Загружаем сгенерированные документы
-print("\n📤 Загрузка сгенерированных документов...")
-for filename in os.listdir(output_dir):
-    if filename.endswith('.xlsx') or filename.endswith('.docx'):
-        local_path = os.path.join(output_dir, filename)
-        dropbox_path = f'/generated/{filename}'
+def sync_data_only():
+    print(f"[{datetime.now()}] Синхронизация data/ (Trello)...")
+    
+    auth = DropboxAuth()
+    dbx = auth.get_client()
+    
+    folder = 'data'
+    
+    # 1. Создаем папку data/ если не существует
+    create_folder_if_not_exists(dbx, f'/{folder}')
+    
+    # 2. Локальная папка
+    os.makedirs(folder, exist_ok=True)
+    
+    # 3. Dropbox/data → Локально
+    try:
+        result = dbx.files_list_folder(f'/{folder}')
+        print(f"📂 data/: {len(result.entries)} файлов")
         
-        try:
-            subprocess.run([
-                'python3', 'dropbox_sync.py', '--token', os.getenv('TOKEN'),
-                '--local', local_path,
-                '--dropbox', dropbox_path,
-                '--upload-only'
-            ], check=True, capture_output=False)
-            print(f"✅ {filename} загружен")
-        except subprocess.CalledProcessError as e:
-            print(f"⚠️  Не удалось загрузить {filename}")
+        for entry in result.entries:
+            if isinstance(entry, dropbox.files.FileMetadata):
+                local_file = Path(folder) / entry.name
+                local_file.parent.mkdir(parents=True, exist_ok=True)
+                dbx.files_download_to_file(local_file, f'/{folder}/{entry.name}')
+                print(f"📥 data/{entry.name}")
+    except Exception as e:
+        print(f"⚠️ data/ пуста: {e}")
+    
+    # 4. Локально/data → Dropbox
+    for local_file in Path(folder).rglob('*'):
+        if local_file.is_file():
+            dbx_path = f'/{folder}/{local_file.relative_to(folder)}'
+            with open(local_file, 'rb') as f:
+                dbx.files_upload(f.read(), dbx_path, 
+                               mode=dropbox.files.WriteMode('overwrite'))
+            print(f"📤 {dbx_path}")
+    
+    print(f"✅ data/ синхронизирована: {datetime.now()}")
 
-print()
-print("=" * 80)
-print("✅ ПОЛНАЯ СИНХРОНИЗАЦИЯ ЗАВЕРШЕНА")
-print("=" * 80)
-print()
+if __name__ == '__main__':
+    sync_data_only()
