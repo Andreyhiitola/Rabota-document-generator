@@ -1,74 +1,65 @@
 #!/usr/bin/env python3
 import os
-import dropbox
-import requests
-from dotenv import load_dotenv
-from pathlib import Path
 from datetime import datetime
+import pandas as pd
+from dropbox import Dropbox
+from dropbox.exceptions import HttpError
+import requests
 
-load_dotenv()
+print(f"[{(datetime.now())}] Trello → data.xls → Dropbox...")
 
-class DropboxAuth:
-    def __init__(self):
-        self.app_key = os.getenv('DROPBOX_APP_KEY')
-        self.app_secret = os.getenv('DROPBOX_APP_SECRET')
-        self.refresh_token = os.getenv('DROPBOX_REFRESH_TOKEN')
-    
-    def get_client(self):
-        response = requests.post('https://api.dropbox.com/oauth2/token', data={
-            'grant_type': 'refresh_token',
-            'refresh_token': self.refresh_token,
-            'client_id': self.app_key,
-            'client_secret': self.app_secret,
-        }).json()
-        return dropbox.Dropbox(response['access_token'])
+# .env переменные (добавь в .env!)
+DROPBOX_TOKEN = os.getenv('DROPBOX_TOKEN')
+TRELLO_KEY = os.getenv('TRELLO_KEY') 
+TRELLO_TOKEN = os.getenv('TRELLO_TOKEN')
+TRELLO_BOARD_ID = os.getenv('TRELLO_BOARD_ID')  # Получи из URL доски
 
-def create_folder_if_not_exists(dbx, folder_path):
-    """Создает папку в Dropbox если не существует"""
-    try:
-        dbx.files_list_folder(folder_path)
-    except:
-        dbx.files_create_folder_v2(folder_path)
-        print(f"📁 Создана папка: {folder_path}")
+if not all([DROPBOX_TOKEN, TRELLO_KEY, TRELLO_TOKEN, TRELLO_BOARD_ID]):
+    print("❌ .env неполный! Добавь TRELLO_* переменные")
+    exit(1)
 
-def sync_data_only():
-    print(f"[{datetime.now()}] Синхронизация data/ (Trello)...")
-    
-    auth = DropboxAuth()
-    dbx = auth.get_client()
-    
-    folder = 'data'
-    
-    # 1. Создаем папку data/ если не существует
-    create_folder_if_not_exists(dbx, f'/{folder}')
-    
-    # 2. Локальная папка
-    os.makedirs(folder, exist_ok=True)
-    
-    # 3. Dropbox/data → Локально
-    try:
-        result = dbx.files_list_folder(f'/{folder}')
-        print(f"📂 data/: {len(result.entries)} файлов")
-        
-        for entry in result.entries:
-            if isinstance(entry, dropbox.files.FileMetadata):
-                local_file = Path(folder) / entry.name
-                local_file.parent.mkdir(parents=True, exist_ok=True)
-                dbx.files_download_to_file(local_file, f'/{folder}/{entry.name}')
-                print(f"📥 data/{entry.name}")
-    except Exception as e:
-        print(f"⚠️ data/ пуста: {e}")
-    
-    # 4. Локально/data → Dropbox
-    for local_file in Path(folder).rglob('*'):
-        if local_file.is_file():
-            dbx_path = f'/{folder}/{local_file.relative_to(folder)}'
-            with open(local_file, 'rb') as f:
-                dbx.files_upload(f.read(), dbx_path, 
-                               mode=dropbox.files.WriteMode('overwrite'))
-            print(f"📤 {dbx_path}")
-    
-    print(f"✅ data/ синхронизирована: {datetime.now()}")
+# 1. Trello API → JSON
+print("📥 Trello данные...")
+url = f"https://api.trello.com/1/boards/{TRELLO_BOARD_ID}/cards"
+params = {
+    'key': TRELLO_KEY,
+    'token': TRELLO_TOKEN,
+    'fields': 'name,desc,due,lastActivity,idList'
+}
 
-if __name__ == '__main__':
-    sync_data_only()
+response = requests.get(url, params=params)
+cards = response.json()
+
+data = []
+for card in cards:
+    # Получаем название списка
+    list_url = f"https://api.trello.com/1/lists/{card['idList']}"
+    list_params = {'key': TRELLO_KEY, 'token': TRELLO_TOKEN, 'fields': 'name'}
+    list_name = requests.get(list_url, params=list_params).json()['name']
+    
+    data.append({
+        'Список': list_name,
+        'Название': card['name'],
+        'Описание': card.get('desc', ''),
+        'Дата активности': card.get('lastActivity', ''),
+        'Дедлайн': card.get('due', ''),
+        'URL': f"https://trello.com/c/{card['id']}"
+    })
+
+print(f"📊 Найдено {len(data)} карточек")
+
+# 2. Excel файл
+os.makedirs('data', exist_ok=True)
+df = pd.DataFrame(data)
+data_path = 'data/data.xls'
+df.to_excel(data_path, index=False)
+print(f"✅ data.xls создан: {data_path}")
+
+# 3. Dropbox
+print("📤 Dropbox...")
+dbx = Dropbox(DROPBOX_TOKEN)
+with open(data_path, 'rb') as f:
+    dbx.files_upload(f.read(), '/data/data.xls', mode=dropbox.files.WriteMode('overwrite'))
+print("✅ data.xls в Dropbox/data/data.xls")
+
+print(f"✅ ГОТОВО: {datetime.now()}")
