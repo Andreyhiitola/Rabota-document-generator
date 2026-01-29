@@ -1,22 +1,10 @@
-version: '3.8'
-
 services:
   sync:
-    image: andreysagurov/severen-generator:latest
+    build: .
     container_name: severen-sync
     env_file:
       - .env
     volumes:
-      - ./data:/app/data  # ← ТОЛЬКО data/ синхронизация
+      - ./data:/app/data
     command: python3 full_sync.py
     restart: "no"
-    
-  watchtower:
-    image: containrrr/watchtower
-    container_name: watchtower
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      - WATCHTOWER_CLEANUP=true
-      - WATCHTOWER_POLL_INTERVAL=300
-    restart: unless-stopped

@@ -277,3 +277,4 @@ marimo/_lsp/
 __marimo__/
 .env
 data/
+severen-generator/

@@ -14,13 +14,14 @@ COPY requirements_full.txt .
 # Установка Python зависимостей
 RUN pip install --no-cache-dir -r requirements_full.txt
 
-# Копирование всех файлов проекта
-COPY *.py ./
-COPY template.xlsx ./
+# Копирование скриптов из КОРНЯ
+COPY full_sync.py .
+COPY sync_trello_severen.py .
+COPY dropbox_sync.py .
 
-# Создание необходимых папок с правами
-RUN mkdir -p /app/excel_files /app/output /app/logs /app/templates && \
-    chmod -R 777 /app/excel_files /app/output /app/logs /app/templates
+# Создание необходимых папок
+RUN mkdir -p /app/data /app/logs && \
+    chmod -R 777 /app/data /app/logs
 
 # Права на выполнение
 RUN chmod +x *.py
